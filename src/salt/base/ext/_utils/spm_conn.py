@@ -53,7 +53,7 @@ TRIGGERS = {
     7: "boot_timeout",
     8: "heartbeat_timeout",
 }
-
+log leve
 
 class SPMConn(GPIOSPIConn):
 
@@ -163,21 +163,24 @@ class SPMConn(GPIOSPIConn):
         ret = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + (bytes[3] << 0)
 
         return ret
-
+    # start
     def start_3v3(self):
         self._begin_message()
 
         log.info("Starting 3V3")
         self.send(CMD_START_3V3)
         self.recv(ack=ACK_START_3V3)
-
+    # stop
     def stop_3v3(self):
         self._begin_message()
 
         log.warn("Stopping 3V3")
         self.send(CMD_STOP_3V3)
         self.recv(ack=ACK_STOP_3V3)
-
+    # start & stop
     def restart_3v3(self):
+        self._begin_message()
+        
+        log.warn("Restarting 3v3")
         self.stop_3v3()
         self.start_3v3()
