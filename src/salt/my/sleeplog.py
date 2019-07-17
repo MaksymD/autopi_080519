@@ -6,6 +6,8 @@ def sleepcan(textContent, keyword):
     count=len([1 for line in lines if line.find(keyword)!=-1])
     return count
 
+    file=open(r "\var\log'salt\minion", "r", encoding="utf-8-sig")
+
 >>> yourTextFile="hello world\n some words here\n goodbye world"
 >>> kwdCount(ourTextFile,"ERROR")
     2:
