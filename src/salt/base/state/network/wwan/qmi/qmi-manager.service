@@ -1,0 +1,13 @@
+[Unit]
+Description=QMI Network Connection Manager Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/qmi-manager run
+ExecStopPost=/usr/bin/qmi-manager down
+Restart=on-failure
+RestartSec=30
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
