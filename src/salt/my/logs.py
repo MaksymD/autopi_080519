@@ -4,9 +4,9 @@ import os.path
 import datetime
 import logging
 from os import path
+from os import walk
 
 log = logging.getLogger(__name__)
-
 
 # path = '/var/log/salt/'
 
@@ -61,20 +61,51 @@ def test():
     return {"msg": "Log created and moved to DropBox! Folder Name: " + deviceid}
 
 
-# show all *.GZ logs files saved in folder
+# TEST show all *.GZ logs files saved in folder
 def list():
     deviceid = file.read()
     deviceid = deviceid.rstrip('\n')
     minion_path = '/var/log/salt'
     path = '{}/{}'.format(minion_path, deviceid)
     files = []
-    # r=root, d=directories, f = files
-    for r, d, f in os.walk(path):
-        for file in f:
-            if '.gz' in file:
-                files.append(os.path.join(r, file))
-    # ADD if no files -> msg no files exist
-    for f in files:
-        print(f)
+    # TEST if no files -> msg no files exist
+    if len(os.listdir(minion_path, '.*gz'))==0:
+        print("No Zip Log files exist in Device!")
+    else:
+        # r=root, d=directories, f = files
+        for r, d, f in os.walk(path):
+            for file in f:
+                if '.gz' in file:
+                    files.append(os.path.join(r, file))
+        for f in files:
+            print(f)
 
-# add functionality to download log by name from //filenamelo // from previus functionality
+# TEST functionality to download all files as archive
+def all():
+    hostname = socket.gethostname()
+
+    date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    archname = 'system_{}_{}.tar.gz'.format(hostname, date)
+
+    file = open('/etc/salt/minion_id')
+    deviceid = file.read()
+    deviceid = deviceid.rstrip('\n')
+
+    dropboxpath = '/Device_Files/Key_and_ConfigurationFiles/{}/{}'.format(deviceid, archname)
+    backuppath = '/home/pi/backup/{}'.format(archname)
+
+    os.system('tar -zcvf /home/pi/backup/{} /var/log/salt').format(archname)
+
+    # saving all to Dropbox with creating the folder
+    headers = {
+        'Authorization': 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H',
+        'Dropbox-API-Arg': '{"path":"' + dropboxpath + '"}',
+        'Content-Type': 'application/octet-stream'
+    }
+    data = open(backuppath, 'rb').read()
+    response = requests.post('https://content.dropboxapi.com/2/files/upload', headers=headers, data=data, timeout=900)
+    return {"msg": "Backup of device System files & Keys is created and moved to DropBox! Folder Name: " + deviceid}
+
+# ADD functionality to download log by name
+# ADD functionality to download all files as archive
