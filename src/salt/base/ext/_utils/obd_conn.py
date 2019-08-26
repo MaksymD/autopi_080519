@@ -63,7 +63,8 @@ class OBDConn(object):
             raise ValueError("Setting 'baudrate' has unsupported value")
         self._baudrate = settings["baudrate"]
 
-        if "timeout" in settings:
+        self.settings = "timeout" in settings
+        if self.settings:
             self._timeout = settings["timeout"]
 
         if "protocol" in settings:
