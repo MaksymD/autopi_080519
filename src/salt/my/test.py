@@ -3,6 +3,8 @@ import os
 import os.path
 import datetime
 import logging
+import fnmatch
+import glob
 from os import path
 
 log = logging.getLogger(__name__)
@@ -21,7 +23,7 @@ minion_path = '/home/maxdotsenko/Desktop/Aviloo/Ticketc/D10'
 
 
 # TESTED download current log file
-def test(timeout=600):
+def now(timeout=600):
     # TO DO pathtologfile = '/var/log/salt/'
     os.system('mkdir - p /var/log/salt/{}'.format(deviceid))
     # TESTED check if file is exist and if file > 0 size
@@ -93,8 +95,6 @@ def logs_gz(timeout=300):
     return {"msg": "All logs files saved on DropBox! Folder Name: donglelogs/" + deviceid}
 
 
-# ADD functionality to download log by name
-
 # TESTED - OK
 def logs_all(timeout=300):
     ARHname = 'all_logs.tar.gz'
@@ -115,3 +115,38 @@ def logs_all(timeout=300):
     response = requests.post(dropboxURL, headers=headers, data=data, timeout=timeout)
     print(response)
     return {"msg": "Folder with all logs files saved on DropBox! Folder Name: donglelogs/" + deviceid}
+
+
+# ADD functionality to download log by name
+def log_file(timeout=300):
+    # x, timeout=300
+    # TO DO minion_path = '/var/log/salt/{}/'.format(deviceid)
+    # TESTED if no files -> msg no files exist
+    ARHname = 'requested_log.tar.gz'
+    dropboxpathARH3 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
+
+    listOfFiles = os.listdir('/home/maxdotsenko/Desktop/Aviloo/Ticketc/D10')
+    pattern = "*.gz"
+    for entry in listOfFiles:
+        if fnmatch.fnmatch(entry, pattern):
+            print (entry)
+
+    my_filename = input('Please enter a filename: ')
+    if os.path.isfile('/home/maxdotsenko/Desktop/Aviloo/Ticketc/D10'+my_filename):
+        my_dir = '/home/maxdotsenko/Desktop/Aviloo/Ticketc/D10'
+        for my_dir, my_filename in os.walk('.'):
+            for i in glob.glob(my_dir+'/*'+my_filename):
+                print i
+        # saving file to Dropbox in the date_of_creation folder
+            headers = {
+                'Authorization': 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H',
+                'Dropbox-API-Arg': '{"path":"' + dropboxpathARH3 + '"}',
+                'Content-Type': 'application/octet-stream'
+            }
+            data = open(i, 'rb').read()
+            response = requests.post(dropboxURL, headers=headers, data=data, timeout=timeout)
+            print(response)
+            print ("File "+my_filename+" that you requested saved on DropBox! Folder Name: donglelogs/" + deviceid)
+        #return {"msg": "File "+my_filename+" that you requested saved on DropBox! Folder Name: donglelogs/" + deviceid}
+    else:
+        print ("Something went wrong")
