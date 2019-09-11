@@ -147,6 +147,7 @@ def delete():
             if len(os.listdir(folder)) == 0:
                 ret['messages'].append("ERROR: Directory is empty! No Log files exist in Device!")
                 # TO DO don't give an error msg.
+                return ret
             else:
                 ret['messages'].append("Files size is= ")
                 ret['messages'].append(convert_size)
