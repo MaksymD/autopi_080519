@@ -5,7 +5,17 @@ import datetime
 import logging
 import fnmatch
 import glob
+
+#ON TESTING
+#timeout
+from functools import wraps
+import errno
+import os
+import signal
 import time
+
+
+
 
 from os import path
 
@@ -26,6 +36,30 @@ gzipfilenamelog = filenamelog + '.gz'
 minion_path = '/var/log/salt/{}/'.format(deviceid)
 ret = {'messages': []}  # type: Dict[str, List[Any]]
 
+#TEST
+# Initialize timeout decorator
+class TimeoutError(Exception):
+    pass
+
+def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
+    def decorator(func):
+        def _handle_timeout(signum, frame):
+            raise TimeoutError(error_message)
+
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wraps(func)(wrapper)
+
+    return decorator
+
+# Converting files/folder size
 def convert_bytes(num):
     """
     this function will convert bytes to MB.... GB... etc
@@ -35,15 +69,17 @@ def convert_bytes(num):
             return "%3.1f %s" % (num, x)
         num /= 1024.0
 
-
-def now (timeout=None, kwarg=None, kwarg=None,kwarg: _timeout=120):
-    kwarg: _timeout = 120
+# Downloading current log file
+@timeout(300)
+def now():
     os.system('mkdir - p /var/log/salt/{}'.format(deviceid))
     # checking if file is exist and if file > 0 size
     if path.exists(pathtologfile) and os.stat(pathtologfile).st_size > 0:
         os.system('mv /var/log/salt/minion {}'.format(filenamelog))
         os.system('gzip --keep -f {} > {}'.format(filenamelog, gzipfilenamelog))
-        os.system('rm /var/log/salt/minion')
+        os.remove('/var/log/salt/minion')
+        # deleting temporary log file
+        os.system("find /var/log/salt/{}/ -type f -not -name '*gz' -print0 | xargs -0 rm --".format(deviceid))
         # to log file and creating a new log file
         log.warning("INFO: Minion Log file Zipped and moved to: /var/log/salt/{}".format(deviceid))
 
@@ -53,20 +89,17 @@ def now (timeout=None, kwarg=None, kwarg=None,kwarg: _timeout=120):
             'Content-Type': 'application/octet-stream'
         }
         data = open(gzipfilenamelog, 'rb').read()
-        # TEST timeout to prevent handing the post request
+        # timeout to prevent handing the post request
         response = requests.post(dropboxURL, headers=headers, data=data, timeout=90)
         # to log file
         log.warning("INFO: Minion Log file copied to Dropbox: {}".format(dropboxpath))
-        #requests.ReadTimeout:
-        #ret['messages'].append("READ TIME OUT")
-        # to log file
-        #log.warning("INFO: Minion Log file was NOT copied to Dropbox: {READ TIME OUT}")
         return {"msg": "Log created and moved to DropBox! Folder Name: " + deviceid}
     else:
-        return {"msg": "Minion Log file not exist or less than 0!"}
+        return {"msg": "Minion Log file not exist or minion < 0 !"}
 
 
-# TESTED show all *.GZ logs files saved in folder
+# show all *.GZ logs files saved in folder
+@timeout(120)
 def logs_list():
     files = []
     # TESTED if no files -> msg no files exist
@@ -86,6 +119,7 @@ def logs_list():
 
 
 # TESTED functionality to download all files as archive
+@timeout(300)
 def logs_gz():
     ARHname = 'all_gz_logs.tar.gz'
     dropboxpathARH1 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
@@ -108,6 +142,7 @@ def logs_gz():
     return {"msg": "NAME: all_gz_logs.tar.gz -> ARCH with logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/DATE"}
 
 
+@timeout(300)
 def logs_all():
     ARHname = 'all_logs.tar.gz'
     dropboxpathARH2 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
@@ -130,32 +165,9 @@ def logs_all():
     return {"msg": "NAME: all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/DATE"}
 
 # download log by name
+@timeout(120)
 def log_file():
     file_name = input('give file name as: ')
-
-
-# delete all logs
-def delete():
-    # determine size of the folder in Kilobytes
-    folder = ('/var/log/salt/{}'.format(deviceid))
-    folder_size = 0
-    for (path, dirs, files) in os.walk(folder):
-        for file in files:
-            filename = os.path.join(path, file)
-            folder_size += os.path.getsize(filename)
-            convert_size = convert_bytes(folder_size)
-            if len(os.listdir(folder)) == 0:
-                ret['messages'].append("ERROR: Directory is empty! No Log files exist in Device!")
-                # TO DO don't give an error msg.
-                return ret
-            else:
-                ret['messages'].append("Files size is= ")
-                ret['messages'].append(convert_size)
-                os.system('rm -r /var/log/salt/{}/*'.format(deviceid))
-                log.warning("INFO: All Minion Log Archives are deleted")
-                ret['messages'].append("Old archive files are deleted!")
-    return ret
-
 
 # in process
 def log_file2():
@@ -190,3 +202,27 @@ def log_file2():
     else:
         ret['messages'].append("Something went wrong")
         return ret
+
+
+# delete all logs
+@timeout(120)
+def delete():
+    # determine size of the folder in Kilobytes
+    global convert_size
+    folder = ('/var/log/salt/{}'.format(deviceid))
+    folder_size = 0
+    for (path, dirs, files) in os.walk(folder):
+        for file in files:
+            filename = os.path.join(path, file)
+            folder_size += os.path.getsize(filename)
+            convert_size = convert_bytes(folder_size)
+    if len(os.listdir(folder)) == 0:
+        ret['messages'].append("ERROR: Directory is empty! No Log files exist in Device!")
+        return ret
+    else:
+        ret['messages'].append("Files size is= ")
+        ret['messages'].append(convert_size)
+        os.system('rm -r /var/log/salt/{}/*'.format(deviceid))
+        log.warning("INFO: All Minion Log Archives are deleted")
+        ret['messages'].append("Old archive files are deleted!")
+    return ret
