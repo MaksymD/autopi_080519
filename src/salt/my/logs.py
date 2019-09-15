@@ -6,58 +6,31 @@ import logging
 import fnmatch
 import glob
 
-#ON TESTING
-#timeout
-from functools import wraps
-import errno
-import os
-import signal
-import time
-
-
-
-
 from os import path
-
 from typing import Dict, List, Any
 
 log = logging.getLogger(__name__)
 
 date = datetime.datetime.now().strftime("%Y-%m-%d")
 time = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M")
+
 fileid = open('/etc/salt/minion_id')
 deviceid = fileid.read()
 deviceid = deviceid.rstrip('\n')
-pathtologfile = '/var/log/salt/minion'
-dropboxpath = '/donglelogs/{}/{}/log_{}.gz'.format(deviceid, date, time)
+
+path_to_arch_folder = '/var/log/salt/{}/'.format(deviceid)
+file_name_log = '/var/log/salt/{}/log_{}'.format(deviceid, time)
+minion_file = 'minion'
+path_to_log = '/var/log/salt/'
+path_to_minion_file = '/var/log/salt/minion'
+file_name_log_gzip = file_name_log + '.gz'
+
+dropbox_KEY = 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H'
+dropbox_fila_path = '/donglelogs/{}/{}/log_{}.gz'.format(deviceid, date, time)
 dropboxURL = 'https://content.dropboxapi.com/2/files/upload'
-filenamelog = '/var/log/salt/{}/log_{}'.format(deviceid, time)
-gzipfilenamelog = filenamelog + '.gz'
-minion_path = '/var/log/salt/{}/'.format(deviceid)
+
 ret = {'messages': []}  # type: Dict[str, List[Any]]
 
-#TEST
-# Initialize timeout decorator
-class TimeoutError(Exception):
-    pass
-
-def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
-    def decorator(func):
-        def _handle_timeout(signum, frame):
-            raise TimeoutError(error_message)
-
-        def wrapper(*args, **kwargs):
-            signal.signal(signal.SIGALRM, _handle_timeout)
-            signal.alarm(seconds)
-            try:
-                result = func(*args, **kwargs)
-            finally:
-                signal.alarm(0)
-            return result
-
-        return wraps(func)(wrapper)
-
-    return decorator
 
 # Converting files/folder size
 def convert_bytes(num):
@@ -69,135 +42,147 @@ def convert_bytes(num):
             return "%3.1f %s" % (num, x)
         num /= 1024.0
 
-# Downloading current log file
-@timeout(300)
-def now():
-    os.system('mkdir - p /var/log/salt/{}'.format(deviceid))
-    # checking if file is exist and if file > 0 size
-    if path.exists(pathtologfile) and os.stat(pathtologfile).st_size > 0:
-        os.system('mv /var/log/salt/minion {}'.format(filenamelog))
-        os.system('gzip --keep -f {} > {}'.format(filenamelog, gzipfilenamelog))
-        os.remove('/var/log/salt/minion')
-        # deleting temporary log file
-        os.system("find /var/log/salt/{}/ -type f -not -name '*gz' -print0 | xargs -0 rm --".format(deviceid))
-        # to log file and creating a new log file
-        log.warning("INFO: Minion Log file Zipped and moved to: /var/log/salt/{}".format(deviceid))
 
+# Downloading current log file
+def now():
+    os.system('mkdir - p {}'.format(path_to_arch_folder))
+    # checking if file is exist and if file > 0 size
+    if path.exists(path_to_minion_file) and os.stat(path_to_minion_file).st_size > 0:
+        os.system('mv {} {}'.format(path_to_minion_file, file_name_log))
+        os.system('gzip --keep -f {} > {}'.format(file_name_log, file_name_log_gzip))
+        os.system('rm /var/log/salt/minion')
+        # deleting temporary log file
+        os.system("find {} -type f -not -name '*gz' -print0 | xargs -0 rm --".format(path_to_arch_folder))
+        # msg. to log file that creates a new log file
+        log.warning("INFO: Minion Log file Zipped and moved to: {}".format(path_to_arch_folder))
         headers = {
-            'Authorization': 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H',
-            'Dropbox-API-Arg': '{"path":"' + dropboxpath + '"}',
+            'Authorization': dropbox_KEY,
+            'Dropbox-API-Arg': '{"path":"' + dropbox_fila_path + '"}',
             'Content-Type': 'application/octet-stream'
         }
-        data = open(gzipfilenamelog, 'rb').read()
+        data = open(file_name_log_gzip, 'rb').read()
         # timeout to prevent handing the post request
         response = requests.post(dropboxURL, headers=headers, data=data, timeout=90)
         # to log file
-        log.warning("INFO: Minion Log file copied to Dropbox: {}".format(dropboxpath))
-        return {"msg": "Log created and moved to DropBox! Folder Name: " + deviceid}
+        log.warning("INFO: Minion Log file copied to Dropbox: {}".format(dropbox_fila_path))
+        return {"msg": "Log created and moved to DropBox! Folder NAME: "+ deviceid +"/"+ date +"  File NAME: "+ file_name_log_gzip}
     else:
         return {"msg": "Minion Log file not exist or minion < 0 !"}
 
 
+# Functionality to download all log *.GZ files as archive
+def logs_gz():
+    ARHname = 'all_gz_logs_{}.tar.gz'.format(date)
+    dropboxpathARH1 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
+    backup_path = '/home/pi/backup/all_gz/{}'.format(ARHname)
+    os.system('mkdir - p /home/pi/backup/')
+    os.system('mkdir - p /home/pi/backup/all_gz')
+    os.system('cp {}*.gz /home/pi/backup/all_gz'.format(path_to_arch_folder))
+    os.system('tar -zcvf /home/pi/backup/all_gz/{} /home/pi/backup/all_gz'.format(ARHname))
+
+    # saving all to Dropbox in the date_of_creation folder
+    headers = {
+        'Authorization': dropbox_KEY,
+        'Dropbox-API-Arg': '{"path":"' + dropboxpathARH1 + '"}',
+        'Content-Type': 'application/octet-stream'
+    }
+    data = open(backup_path, 'rb').read()
+    response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
+    return {
+        "msg": "File NAME: "+ ARHname +" -> ARCH with logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}
+
+# download not only *.GZ but also all files in folder (as a reserv function)
+unused = '''def logs_all():
+    ARHname = 'all_logs.tar.gz'
+    dropboxpathARH2 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
+    backup_path = '/home/pi/backup/all/all_logs.tar.gz'
+    os.system('mkdir - p /home/pi/backup/')
+    os.system('mkdir - p /home/pi/backup/all')
+    os.system('cp {} /home/pi/backup/all'.format(path_to_arch_folder))
+    os.system('tar -zcvf /home/pi/backup/all/all_logs.tar.gz {}'.format(path_to_arch_folder))
+
+    # saving all to Dropbox in the date_of_creation folder
+    headers = {
+        'Authorization': dropbox_KEY,
+        'Dropbox-API-Arg': '{"path":"' + dropboxpathARH2 + '"}',
+        'Content-Type': 'application/octet-stream'
+    }
+    data = open(backup_path, 'rb').read()
+    response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
+    #ret['messages'].append("NAME:all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/"+ date)
+    #return ret
+    return {"msg": "File NAME: all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}'''
+
 # show all *.GZ logs files saved in folder
-@timeout(120)
 def logs_list():
     files = []
-    # TESTED if no files -> msg no files exist
-    if len(os.listdir(minion_path)) == 0:
+    # if no files -> msg no files exist
+    if len(os.listdir(path_to_arch_folder)) == 0:
         ret['messages'].append("Directory is empty! No Log files exist in Device!")
     else:
         ret['messages'].append("Here is the list of log files:\n")
         # r=root, d=directories, f = files
-        for r, d, f in os.walk(minion_path):
+        for r, d, f in os.walk(path_to_arch_folder):
             for file in sorted(f):
                 if '.gz' in file:
                     files.append(os.path.join(r, file))
         for f in files:
             ret['messages'].append(f)
     return ret
-# ADD functionality to download log by name
 
-
-# TESTED functionality to download all files as archive
-@timeout(300)
-def logs_gz():
-    ARHname = 'all_gz_logs.tar.gz'
-    dropboxpathARH1 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
-    backuppath = '/home/pi/backup/all_gz/all_gz_logs.tar.gz'
-    os.system('mkdir - p /home/pi/backup/')
-    os.system('mkdir - p /home/pi/backup/all_gz')
-    os.system('cp /var/log/salt/{}/*.gz /home/pi/backup/all_gz'.format(deviceid))
-    os.system('tar -zcvf /home/pi/backup/all_gz/all_gz_logs.tar.gz /home/pi/backup/all_gz')
-
-    # saving all to Dropbox in the date_of_creation folder
+# download log by name
+def log_file():
+    logs_list() #ADD make a list with numbers of files
+    arch_selected_name = 'selected_log{}.tar.gz'.format(date)
+    dropboxpathARH2 = '/donglelogs/{}/{}/{}'.format(deviceid, date, arch_selected_name)
+    unused = '''     return self.func(*self.args, **self.kwargs)
+                     File "/opt/autopi/salt/modules/my_log.py", line 138, in log_file
+                     file_name = input('Give a full file name: ')
+                     EOFError: EOF when reading a line'''
+    file_name = input('Give a full file name: ')
+    requested_file = path_to_arch_folder + file_name
+    # saving selected file to Dropbox in the date_of_creation folder
     headers = {
-        'Authorization': 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H',
-        'Dropbox-API-Arg': '{"path":"' + dropboxpathARH1 + '"}',
-        'Content-Type': 'application/octet-stream'
-    }
-    data = open(backuppath, 'rb').read()
-    response = requests.post(dropboxURL, headers=headers, data=data, _timeout=300)
-    #ret['messages'].append("NAME: all_gz_logs.tar.gz -> ARCH with logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/DATE")
-    #return ret
-    return {"msg": "NAME: all_gz_logs.tar.gz -> ARCH with logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/DATE"}
-
-
-@timeout(300)
-def logs_all():
-    ARHname = 'all_logs.tar.gz'
-    dropboxpathARH2 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
-    backuppath = '/home/pi/backup/all/all_logs.tar.gz'
-    os.system('mkdir - p /home/pi/backup/')
-    os.system('mkdir - p /home/pi/backup/all')
-    os.system('cp /var/log/salt/{}/ /home/pi/backup/all'.format(deviceid))
-    os.system('tar -zcvf /home/pi/backup/all/all_logs.tar.gz /var/log/salt/{}/'.format(deviceid))
-
-    # saving all to Dropbox in the date_of_creation folder
-    headers = {
-        'Authorization': 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H',
+        'Authorization': dropbox_KEY,
         'Dropbox-API-Arg': '{"path":"' + dropboxpathARH2 + '"}',
         'Content-Type': 'application/octet-stream'
     }
-    data = open(backuppath, 'rb').read()
-    response = requests.post(dropboxURL, headers=headers, data=data, _timeout=300)
-    #ret['messages'].append("NAME:all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/DATE")
-    #return ret
-    return {"msg": "NAME: all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/DATE"}
+    data = open(requested_file, 'rb').read()
+    response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
+    return {
+        "msg": "File NAME: "+ arch_selected_name +" -> ARCH with all logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}
 
-# download log by name
-@timeout(120)
-def log_file():
-    file_name = input('give file name as: ')
 
-# in process
-def log_file2():
-    # x, timeout=300
-    # TESTED if no files -> msg no files exist
+# ADD functionality to download log by name
+
+
+# Download log.GZ file by name
+def log_file2(path_to_arch_folder=None):
+    # if no files -> msg no files exist
     ARHname = 'requested_log.tar.gz'
     dropboxpathARH3 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
 
-    listOfFiles = os.listdir('/var/log/salt/{}/'.format(deviceid))
+    listOfFiles = os.listdir(path_to_arch_folder)
     pattern = "*.gz"
     for entry in listOfFiles:
         if fnmatch.fnmatch(entry, pattern):
             ret['messages'].append(entry)
 
     my_filename = input('Please enter a filename: ')
-    if os.path.isfile('/var/log/salt/{}/'.format(deviceid) + my_filename):
-        my_dir = '/var/log/salt/{}/'.format(deviceid)
-        for my_dir, my_filename in os.walk('.'):
-            for i in glob.glob(my_dir + '/*' + my_filename):
+    if os.path.isfile(path_to_arch_folder + my_filename):
+        for path_to_arch_folder, my_filename in os.walk('.'):
+            for i in glob.glob(path_to_arch_folder + '/*' + my_filename):
                 ret['messages'].append(i)
             # saving file to Dropbox in the date_of_creation folder
             headers = {
-                'Authorization': 'Bearer 5a1GcoGAVWAAAAAAAAAAC499oy3snfHjZSmNsRlGewevH1eoDeXfB8icbHE6V09H',
+                'Authorization': dropbox_KEY,
                 'Dropbox-API-Arg': '{"path":"' + dropboxpathARH3 + '"}',
                 'Content-Type': 'application/octet-stream'
             }
             data = open(i, 'rb').read()
-            response = requests.post(dropboxURL, headers=headers, data=data, _timeout=300)
+            response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
             ret['messages'].append(response)
-            ret['messages'].append("File " + my_filename + " that you requested saved on DropBox! Folder Name: donglelogs/" + deviceid)
+            ret['messages'].append("File NAME: "+ my_filename +"that you requested saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date)
         return ret
     else:
         ret['messages'].append("Something went wrong")
@@ -205,24 +190,22 @@ def log_file2():
 
 
 # delete all logs
-@timeout(120)
 def delete():
     # determine size of the folder in Kilobytes
     global convert_size
-    folder = ('/var/log/salt/{}'.format(deviceid))
     folder_size = 0
-    for (path, dirs, files) in os.walk(folder):
+    for (path, dirs, files) in os.walk(path_to_arch_folder):
         for file in files:
             filename = os.path.join(path, file)
             folder_size += os.path.getsize(filename)
             convert_size = convert_bytes(folder_size)
-    if len(os.listdir(folder)) == 0:
+    if len(os.listdir(path_to_arch_folder)) == 0:
         ret['messages'].append("ERROR: Directory is empty! No Log files exist in Device!")
         return ret
     else:
-        ret['messages'].append("Files size is= ")
+        ret['messages'].append("Files size is = ")
         ret['messages'].append(convert_size)
-        os.system('rm -r /var/log/salt/{}/*'.format(deviceid))
+        os.system('rm -r {}*'.format(path_to_arch_folder))
         log.warning("INFO: All Minion Log Archives are deleted")
         ret['messages'].append("Old archive files are deleted!")
     return ret
