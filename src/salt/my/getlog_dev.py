@@ -75,8 +75,8 @@ def logs_gz():
     ARHname = 'all_gz_logs_{}.tar.gz'.format(date)
     dropboxpathARH1 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
     backup_path = '/home/pi/backup/all_gz/{}'.format(ARHname)
-    os.system('mkdir - p /home/pi/backup/')
-    os.system('mkdir - p /home/pi/backup/all_gz')
+    os.system('mkdir -p /home/pi/backup/')
+    os.system('mkdir -p /home/pi/backup/all_gz')
     os.system('cp {}*.gz /home/pi/backup/all_gz'.format(path_to_arch_folder))
     os.system('tar -zcvf /home/pi/backup/all_gz/{} /home/pi/backup/all_gz'.format(ARHname))
 
@@ -91,6 +91,91 @@ def logs_gz():
     return {
         "msg": "File NAME: "+ ARHname +" -> ARCH with logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}
 
+
+# show all *.GZ logs files saved in folder
+def list():
+    files = []
+    # if no files -> msg no files exist
+    if len(os.listdir(path_to_arch_folder)) == 0:
+        ret['messages'].append("Directory is empty! No Log files exist in Device!")
+    else:
+        ret['messages'].append("Here is the list of log files:\n")
+        # r=root, d=directories, f = files
+        for r, d, f in os.walk(path_to_arch_folder):
+            for file in sorted(f):
+                if '.gz' in file:
+                    files.append(os.path.join(r, file))
+        for f in files:
+            ret['messages'].append(f)
+    return ret
+
+# download log by name
+def log_file(file_name = None):
+    arch_selected_name = 'selected_log_{}.tar.gz'.format(date)
+    dropboxpathARH2 = '/donglelogs/{}/{}/{}'.format(deviceid, date, arch_selected_name)
+    selected_file = '{}{}'.format(path_to_arch_folder, arch_selected_name)
+    requested_file = path_to_arch_folder + file_name
+    os.system('tar -zcvf {}/{} {}'.format(path_to_arch_folder, arch_selected_name, requested_file))
+    # saving selected file to Dropbox in the date_of_creation folder
+    headers = {
+        'Authorization': dropbox_KEY,
+        'Dropbox-API-Arg': '{"path":"' + dropboxpathARH2 + '"}',
+        'Content-Type': 'application/octet-stream'
+    }
+    data = open(selected_file, 'rb').read()
+    response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
+    return {
+        "msg": "File NAME: "+ arch_selected_name +" -> ARCH with all logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}
+
+
+# delete all logs
+def delete():
+    # determine size of the folder in Kilobytes
+    global convert_size
+    folder_size = 0
+    for (path, dirs, files) in os.walk(path_to_arch_folder):
+        for file in files:
+            filename = os.path.join(path, file)
+            folder_size += os.path.getsize(filename)
+            convert_size = convert_bytes(folder_size)
+    if len(os.listdir(path_to_arch_folder)) == 0 and os.listdir('/home/pi/backup/all_gz/') == 0 and os.listdir('/home/pi/backup/all/') == 0:
+        ret['messages'].append("ERROR: Directory is empty! No Log files exist in Device!")
+        return ret
+    else:
+        ret['messages'].append("Files size is= ")
+        ret['messages'].append(convert_size)
+        os.system('rm -r {}*'.format(path_to_arch_folder))
+        os.system('rm -r /home/pi/backup/all_gz/*')
+        os.system('rm -r /home/pi/backup/all/*')
+        log.warning("INFO: All Minion Log Archives are deleted")
+        ret['messages'].append("Old archive files are deleted!")
+    return ret
+
+
+# Download log.GZ file by name
+unused = '''def log_file2(my_filename = None):
+    # TESTED if no files -> msg no files exist
+    ARHname = 'selected_log{}.tar.gz'.format(date)
+    dropboxpathARH3 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
+    path_to_arch_folder = '/var/log/salt/{}/'.format(deviceid)
+    if os.path.isfile(path_to_arch_folder + my_filename):
+        for path_to_arch_folder, my_filename in os.walk('.'):
+            for i in glob.glob(path_to_arch_folder + '/*' + my_filename):
+                ret['messages'].append(i)
+            # saving file to Dropbox in the date_of_creation folder
+            headers = {
+                'Authorization': dropbox_KEY,
+                'Dropbox-API-Arg': '{"path":"' + dropboxpathARH3 + '"}',
+                'Content-Type': 'application/octet-stream'
+            }
+            data = open(i, 'rb').read()
+            response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
+            ret['messages'].append(response)
+            ret['messages'].append("File NAME: "+ my_filename +"that you requested saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date)
+        return ret
+    else:
+        ret['messages'].append("Something went wrong")
+        return ret'''
 # download not only *.GZ but also all files in folder (as a reserv function)
 unused = '''def logs_all():
     ARHname = 'all_logs.tar.gz'
@@ -112,100 +197,3 @@ unused = '''def logs_all():
     #ret['messages'].append("NAME:all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder Name: donglelogs/"+ deviceid +"/"+ date)
     #return ret
     return {"msg": "File NAME: all_logs.tar.gz -> ARCH with all logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}'''
-
-# show all *.GZ logs files saved in folder
-def logs_list():
-    files = []
-    # if no files -> msg no files exist
-    if len(os.listdir(path_to_arch_folder)) == 0:
-        ret['messages'].append("Directory is empty! No Log files exist in Device!")
-    else:
-        ret['messages'].append("Here is the list of log files:\n")
-        # r=root, d=directories, f = files
-        for r, d, f in os.walk(path_to_arch_folder):
-            for file in sorted(f):
-                if '.gz' in file:
-                    files.append(os.path.join(r, file))
-        for f in files:
-            ret['messages'].append(f)
-    return ret
-
-# download log by name
-def log_file():
-    logs_list() #ADD make a list with numbers of files
-    arch_selected_name = 'selected_log{}.tar.gz'.format(date)
-    dropboxpathARH2 = '/donglelogs/{}/{}/{}'.format(deviceid, date, arch_selected_name)
-    unused = '''     return self.func(*self.args, **self.kwargs)
-                     File "/opt/autopi/salt/modules/my_log.py", line 138, in log_file
-                     file_name = input('Give a full file name: ')
-                     EOFError: EOF when reading a line'''
-    file_name = input('Give a full file name: ')
-    requested_file = path_to_arch_folder + file_name
-    # saving selected file to Dropbox in the date_of_creation folder
-    headers = {
-        'Authorization': dropbox_KEY,
-        'Dropbox-API-Arg': '{"path":"' + dropboxpathARH2 + '"}',
-        'Content-Type': 'application/octet-stream'
-    }
-    data = open(requested_file, 'rb').read()
-    response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
-    return {
-        "msg": "File NAME: "+ arch_selected_name +" -> ARCH with all logs files saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date}
-
-
-# ADD functionality to download log by name
-
-
-# Download log.GZ file by name
-def log_file2(path_to_arch_folder=None):
-    # if no files -> msg no files exist
-    ARHname = 'requested_log.tar.gz'
-    dropboxpathARH3 = '/donglelogs/{}/{}/{}'.format(deviceid, date, ARHname)
-
-    listOfFiles = os.listdir(path_to_arch_folder)
-    pattern = "*.gz"
-    for entry in listOfFiles:
-        if fnmatch.fnmatch(entry, pattern):
-            ret['messages'].append(entry)
-
-    my_filename = input('Please enter a filename: ')
-    if os.path.isfile(path_to_arch_folder + my_filename):
-        for path_to_arch_folder, my_filename in os.walk('.'):
-            for i in glob.glob(path_to_arch_folder + '/*' + my_filename):
-                ret['messages'].append(i)
-            # saving file to Dropbox in the date_of_creation folder
-            headers = {
-                'Authorization': dropbox_KEY,
-                'Dropbox-API-Arg': '{"path":"' + dropboxpathARH3 + '"}',
-                'Content-Type': 'application/octet-stream'
-            }
-            data = open(i, 'rb').read()
-            response = requests.post(dropboxURL, headers=headers, data=data, timeout=300)
-            ret['messages'].append(response)
-            ret['messages'].append("File NAME: "+ my_filename +"that you requested saved on DropBox! Folder NAME: donglelogs/"+ deviceid +"/"+ date)
-        return ret
-    else:
-        ret['messages'].append("Something went wrong")
-        return ret
-
-
-# delete all logs
-def delete():
-    # determine size of the folder in Kilobytes
-    global convert_size
-    folder_size = 0
-    for (path, dirs, files) in os.walk(path_to_arch_folder):
-        for file in files:
-            filename = os.path.join(path, file)
-            folder_size += os.path.getsize(filename)
-            convert_size = convert_bytes(folder_size)
-    if len(os.listdir(path_to_arch_folder)) == 0:
-        ret['messages'].append("ERROR: Directory is empty! No Log files exist in Device!")
-        return ret
-    else:
-        ret['messages'].append("Files size is = ")
-        ret['messages'].append(convert_size)
-        os.system('rm -r {}*'.format(path_to_arch_folder))
-        log.warning("INFO: All Minion Log Archives are deleted")
-        ret['messages'].append("Old archive files are deleted!")
-    return ret
